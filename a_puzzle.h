@@ -1,5 +1,6 @@
 #include"stdio.h"
 #include"stdlib.h"
+#include"assert.h"
 
 #define EMPTY 0
 #define DOT 1
@@ -26,8 +27,8 @@ int n;//column num
 
 Elem_type* p_broad;//the global broad
 
-void read_dimension(int*, int*);
-void read_broad(Elem_type*);
+void read_dimension(FILE*, int*, int*);
+void read_broad(FILE*,Elem_type*);
 void print_broad(Elem_type*);
 Barrier_list create_barrier_list(Elem_type*);
 
