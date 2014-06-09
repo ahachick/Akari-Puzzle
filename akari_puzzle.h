@@ -1,6 +1,10 @@
-#include"stdio.h"
-#include"stdlib.h"
-#include"assert.h"
+#ifndef _AKARI_PUZZLE_H
+#define _AKARI_PUZZLE_H
+
+#include<stdio.h>
+#include<stdlib.h>
+#include<assert.h>
+#include<time.h>
 
 #define EMPTY 0
 #define DOT 1
@@ -25,7 +29,7 @@ typedef struct Node{
 int m;//row num
 int n;//column num
 
-Elem_type* p_broad;//the global broad
+Elem_type* g_broad;//the global broad
 
 void read_dimension(FILE*, int*, int*);
 void read_broad(FILE*,Elem_type*);
@@ -42,3 +46,5 @@ int put_dot(int, int, Elem_type*);
 
 int handle_empty(int, Elem_type*);
 int next_empty(int, Elem_type*);
+
+#endif

@@ -1,4 +1,4 @@
-#include"a_puzzle.h"
+#include"pth_akari_puzzle.h"
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 int handle = 0;
@@ -8,9 +8,15 @@ typedef struct {
 	Barrier_list barrier;
 } Params;
 
+typedef struct {
+	Elem_type* p_broad;
+	int pos;
+} Params2;
+
 int main() {
 
 	FILE *fp;
+	double start, finish, diff;
 	if((fp = fopen("akari_puzzle_easy1.txt", "r")) == NULL)
 		return 1;
 	read_dimension(fp, &m, &n);
@@ -24,13 +30,17 @@ int main() {
 	copy_broad(cp_broad, g_broad);
 	params->p_broad = cp_broad;
 	params->barrier = barriers;
+	start = clock();
 	solve_puzzle((void*) params);
-	if(handle)
+	finish = clock();
+	diff = (finish - start) / CLOCKS_PER_SEC;
+	if(handle) {
 		print_broad(g_broad);
-	else
+		printf("Time duration: %lf s\n", diff);
+	}else
 		printf("No solution!\n");
 
-	//free(g_broad);
+	free(g_broad);
 	fclose(fp);
 
 	Barrier_list p;
@@ -121,11 +131,6 @@ Barrier_list create_barrier_list(Elem_type* broad) {
 }
 
 
-#define NORTH  (1<<0)
-#define EAST   (1<<1)
-#define SOUTH  (1<<2)
-#define WEST   (1<<3)
-
 pthread_t* split(int flag, Elem_type* broad, Barrier_list barrier) {
 	Elem_type* cp_broad = (Elem_type*) malloc(sizeof(Elem_type) * m*n);
 	copy_broad(cp_broad,broad);
@@ -157,12 +162,16 @@ pthread_t* split(int flag, Elem_type* broad, Barrier_list barrier) {
 		return NULL;
 	}
 	else {
-		//print_broad(cp_broad);
+		//alway check the result before we split another thread in case we do the unuseful work
+		if(handle) {
+			free(cp_broad);
+			return NULL;
+		}
 		Params* p_params = (Params*) malloc(sizeof(Params));
 		pthread_t* p_handle = (pthread_t*) malloc(sizeof(pthread_t));
 		p_params->barrier = barrier->next;
 		p_params->p_broad = cp_broad;			
-		pthread_create(p_handle, NULL, solve_puzzle, (void*)p_params);
+		pthread_create(p_handle, NULL, solve_puzzle, (void*)p_params);//split
 		return p_handle;
 	}
 }
@@ -183,7 +192,6 @@ void* solve_puzzle(void* p_params) {
 	if(NULL != barrier) {//first phase
 
 		int i;
-
 		pthread_t** thread_handles;
 
 		thread_handles = (pthread_t**) calloc(6, sizeof(pthread_t*));//max thread num is 6
@@ -229,19 +237,27 @@ void* solve_puzzle(void* p_params) {
 				free(thread_handles[i]);
 
 		free(thread_handles);
+		free(broad);
+		free(params);
+		return NULL;
 	} else {//second phase
-		handle_empty(next_empty(-1, broad), broad);
+		Params2* pp = (Params2*) malloc(sizeof(Params2));
+		pp->pos = next_empty(-1, broad);
+		pp->p_broad = broad;
+		handle_empty((void*) pp);
+		return NULL;
 	}
-
-	free(broad);
-	free(params);
-	return NULL;
 }
 
-int handle_empty(int cur, Elem_type* broad) {
+void *handle_empty(void* params) {
 
-	Elem_type* cp_broad;
-	int solved = 0;
+	Params2* pp = (Params2*) params , *pp2;//pp2 as the params of the splited thread 
+	Elem_type* broad, *cp_broad;
+	pthread_t* thread_handle;
+	int cur;
+
+	broad = (Elem_type*)pp->p_broad;
+	cur = pp->pos;
 
 	if(check_complete(broad)){
 		pthread_mutex_lock(&lock);
@@ -250,25 +266,43 @@ int handle_empty(int cur, Elem_type* broad) {
 			handle= 1;
 		}
 		pthread_mutex_unlock(&lock);
-		return 1;
+		free(pp->p_broad);
+		free(pp);
+		return NULL;
 	}
-	if(cur == -1)
-		return 0;
+	if(cur == -1) {
+		free(pp->p_broad);
+		free(pp);
+		return NULL;
+	}
+	
+	//alway check the result before we split another thread in case we do the unuseful work
+	if(handle) {
+		free(pp->p_broad);
+		free(pp);
+		return NULL;
+	}
 
+	thread_handle = (pthread_t*) malloc(sizeof(pthread_t));
 	cp_broad = (Elem_type*)malloc(sizeof(Elem_type) * m * n);
 	copy_broad(cp_broad, broad);
-
 	put_blub(cur / n, cur % n, cp_broad);
-	solved = handle_empty(next_empty(cur, cp_broad), cp_broad);
-	if(!solved){
-		//retore the previous state of the broad
-		copy_broad(cp_broad, broad);
-		solved =  handle_empty(next_empty(cur, cp_broad), cp_broad);
-	}
+	
+	pp2 = (Params2*) malloc(sizeof(Params2));
+	pp2->pos = next_empty(cur, cp_broad);
+	pp2->p_broad = cp_broad;
 
-	free(cp_broad);
-	return solved;
+	//split the thread when we put the blub on it
+	pthread_create(thread_handle, NULL, handle_empty, (void *) pp2);
+
+	//keep the initial thread for the condition that we do not put the blub
+	pp->pos = next_empty(cur, broad);
+	handle_empty((void*) pp);
+	pthread_join(*thread_handle, NULL);
+	free(thread_handle);
+	return NULL;
 }
+
 /*
 *Copy the src broad to des
 */
@@ -333,7 +367,6 @@ int next_empty(int cur, Elem_type* broad){
 	for(i = cur+1; i < m *n; i++)
 		if(broad[i] == EMPTY)
 			return i;
-
 	return -1;
 }
 
